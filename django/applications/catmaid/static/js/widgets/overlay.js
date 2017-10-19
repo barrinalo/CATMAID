@@ -3065,6 +3065,15 @@ SkeletonAnnotations.TracingOverlay.prototype.updateNodes = function (callback,
     var paramsKey = JSON.stringify(params);
     var json = self.nodeListCache.get(paramsKey);
 
+    // Special case: allow fast zoom in (and back out) based on cached data. If
+    // no exact matching node list cache entry was found, try to find a cache
+    // entry that encloses the current request bounding box and that didn't have
+    // any nodes dropped.
+    if (!json) {
+      json = self.createNodeListFromCache(params);
+    }
+
+    // Finally, if a cache entry was found, use it
     if (json) {
       success(json);
     } else {
@@ -3085,6 +3094,72 @@ SkeletonAnnotations.TracingOverlay.prototype.updateNodes = function (callback,
     }
   });
 };
+
+SkeletonAnnotations.TracingOverlay.prototype.createNodeListFromCache = function(params) {
+  var nodeList = null;
+  var self = this;
+  this.nodeListCache.forEachEntry(function(entry) {
+    // Ignore entry if it doesn't contain all nodes for section. Don't use
+    // the cache's get() function, because it will keep each accessed entry
+    // in the cache longer. Use get() only once we know we can use the
+    // entry.
+    let incomplete = entry.value[3];
+    if (incomplete) {
+      return;
+    }
+    // Check if the entry encloses the current request bounding box.
+    let entryParams = JSON.parse(entry.key);
+    let entryEnclosesRequest =
+        entryParams.left <= params.left &&
+        entryParams.right >= params.right &&
+        entryParams.top <= params.top &&
+        entryParams.bottom >= params.bottom &&
+        entryParams.z1 <= params.z1 &&
+        entryParams.z2 >= params.z2;
+    if (entryEnclosesRequest &&
+        entryParams.labels === params.labels) {
+      var cachedJson = self.nodeListCache.get(entry.key);
+      // Use cached entry if there was no hit yet or the cached version is
+      // smaller.
+      var cachedLength = cachedJson[0].length + cachedJson[1].length;
+      if (!nodeList || cachedLength < (nodeList[0].length + nodeList[1].length)) {
+        nodeList = cachedJson;
+      }
+    }
+  });
+
+  // Cut out matching response from cache. This will still leave some extra
+  // nodes in, but not the ones on the curren section.
+  // TODO: This doesn't work for nodes not on this section that are connected to
+  // nodes on the section. They might be out of the bounding box.
+  if (nodeList) {
+    return [
+      nodeList[0].filter(treenodeOnSectionAndInBB, params),
+      nodeList[1].filter(connectorOnSectionAndInBB, params),
+      CATMAID.tools.deepCopy(nodeList[2]),
+      nodeList[3],
+      CATMAID.tools.deepCopy(nodeList[4])
+    ];
+  }
+
+  return null;
+};
+
+function treenodeOnSectionAndInBB(node) {
+  var x = node[2], y = node[3], z = node[4];
+  /* jshint validthis: true */
+  return this.left <= x && x <= this.right &&
+        this.top < y && y <= this.bottom &&
+        this.z1 <= z && z < this.z2;
+}
+
+function connectorOnSectionAndInBB(node) {
+  var x = node[1], y = node[2], z = node[3];
+  /* jshint validthis: true */
+  return this.left <= x && x <= this.right &&
+        this.top < y && y <= this.bottom &&
+        this.z1 <= z && z < this.z2;
+}
 
 /**
  * Set the confidence of the edge partig from the active node towards either the

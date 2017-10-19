@@ -35,6 +35,9 @@ Miscellaneous:
 - Neuron dendrogram: nodes linked to connectors (synaptic sites) can now be
   highlighted.
 
+- Tracing layer: cached node lists are now also used when zooming in (and back
+  out).
+
 
 ### Bug fixes
 
