@@ -66,6 +66,42 @@
   };
 
 
+  function Loader() {
+    this._queue = new Set();
+  }
+
+  Loader.prototype.constructor = Loader;
+
+  Loader.prototype.add = function (url, options, completionCallback) {
+    var request = new Request(
+        url,
+        {mode: 'cors', credentials: 'same-origin'});
+    this._queue.add(request);
+    var remove = (function () { this._queue.delete(request); }).bind(this);
+    fetch(request)
+        .then(function (response) {
+          return response.blob();
+        })
+        .then(function (blob) {
+          var objUrl = window.URL.createObjectURL(blob);
+          var image = new Image();
+
+          image.onload = function () {
+            var texture = PIXI.Texture.fromLoader(this, url);
+            window.URL.revokeObjectURL(objUrl);
+            completionCallback({url: url, texture: texture});
+          };
+
+          image.src = objUrl;
+        })
+        .then(remove);
+  };
+
+  Loader.prototype.queueLength = function () {
+    return this._queue.size;
+  };
+
+
   /**
    * Loads textures from URLs, tracks use through reference counting, caches
    * unused textures, and frees evicted textures.
@@ -77,9 +113,7 @@
     this._boundResourceLoaded = this._resourceLoaded.bind(this);
     this._concurrency = 16;
     this._counts = {};
-    this._loader = new PIXI.loaders.Loader('', this._concurrency);
-    this._loader.load();
-    this._loader._queue.empty = this._loadFromQueue.bind(this);
+    this._loader = new Loader(this._concurrency);
     this._loading = {};
     this._loadingQueue = [];
     this._loadingRequests = new Set();
@@ -134,17 +168,17 @@
    * @private
    */
   PixiContext.TextureManager.prototype._loadFromQueue = function () {
-    var toDequeue = this._concurrency - this._loader._queue.length();
+    var toDequeue = this._concurrency - this._loader.queueLength();
     if (toDequeue < 1) return;
     var remainingQueue = this._loadingQueue.splice(toDequeue);
-    this._loadingQueue.forEach(function (url) {
+    var toLoad = this._loadingQueue;
+    this._loadingQueue = remainingQueue;
+    toLoad.forEach(function (url) {
       this._loader.add(url,
                        {crossOrigin: true,
                         xhrType: PIXI.loaders.Resource.XHR_RESPONSE_TYPE.BLOB},
                        this._boundResourceLoaded);
     }, this);
-    this._loadingQueue = remainingQueue;
-    this._loader.load();
   };
 
   /**
@@ -156,7 +190,6 @@
    */
   PixiContext.TextureManager.prototype._resourceLoaded = function (resource) {
     var url = resource.url;
-    delete this._loader.resources[url];
     var requests = this._loading[url];
     delete this._loading[url];
 
@@ -179,6 +212,8 @@
         request.callback();
       }
     }, this);
+
+    this._loadFromQueue();
   };
 
   /**
@@ -954,37 +989,37 @@
     var fragmentSrc = `
       uniform vec4 unknownLabel;
       uniform vec4 unknownColor;
-      
+
       uniform vec4 backgroundLabel;
       uniform vec4 backgroundColor;
-      
+
       uniform float foregroundAlpha;
       uniform float seed;
-      
+
       varying vec2 vTextureCoord;
       uniform sampler2D uSampler;
-      
+
       float whenEq(vec4 x, vec4 y) {
           return 1.0 - sign(distance(x, y));
       }
-      
+
       vec4 hashToColor(vec4 label) {
           const float SCALE = 33452.5859; // Some large constant to make the truncation interesting.
           label = fract(label * SCALE); // Truncate some information.
           label += dot(label, label.wzyx + 100.0 * seed); // Mix channels and add the salt.
           return vec4(fract((label.xzy + label.ywz) * label.zyw), 1.0) * foregroundAlpha;
       }
-      
+
       void main(void){
           vec4 current = texture2D(uSampler, vTextureCoord);
-      
+
           float isUnknown = whenEq(current, unknownLabel);
           float isBackground = whenEq(current, backgroundLabel);
-      
+
           vec4 final = unknownColor * isUnknown;
           final += backgroundColor * isBackground;
           final += hashToColor(current) * (1.0 - min(isUnknown + isBackground, 1.0));
-      
+
           gl_FragColor.rgba = final;
       }
     `;
