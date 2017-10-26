@@ -6290,7 +6290,7 @@
       for (var i=0, max=nodes.length; i<max && !(parentNode && childNode); ++i) {
         var other = nodes[i];
         if (parentID === other[0]) {
-          parentNode = other; 
+          parentNode = other;
         } else if (nodeID === other[1]) {
           childNode = other;
         }
