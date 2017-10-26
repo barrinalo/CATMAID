@@ -2661,7 +2661,13 @@ SkeletonAnnotations.TracingOverlay.prototype.whenclicked = function (e) {
   for (var p in e) {
     eventFields[p] = e[p];
   }
-  var mockClick = new MouseEvent('mousedown', eventFields);
+  // TODO: Pixi expects pointer events if the browser supports them. The rest
+  // of CATMAID still deals only with mouse events. Luckily, if we pass a mouse
+  // event to Pixi with a pointer event type, it will convert it to a pointer
+  // event, then still call mouse event types for it. When CATMAID handles
+  // pointer events, this kludge should be fixed.
+  var mockType = !!window.PointerEvent ? 'pointerdown' : 'mousedown';
+  var mockClick = new MouseEvent(mockType, eventFields);
   var handled = !this.pixiLayer.renderer.view.dispatchEvent(mockClick);
 
   if (!handled) {
