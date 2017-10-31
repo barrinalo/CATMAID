@@ -905,6 +905,18 @@ SkeletonAnnotations.TracingOverlay.Settings = new CATMAID.Settings(
           },
           subviews_from_cache: {
             default: true
+          },
+          presynaptic_to_rel_color: {
+            default: 0xC80000
+          },
+          postsynaptic_to_rel_color: {
+            default: 0x00D9E8
+          },
+          gapjunction_rel_color: {
+            default: 0x9F25C2
+          },
+          other_rel_color: {
+            default: 0x00C800
           }
         },
         migrations: {
@@ -2419,10 +2431,14 @@ SkeletonAnnotations.TracingOverlay.prototype.refreshNodesFromTuples = function (
       var tnid = r[0];
       var node = this.nodes[tnid];
       if (node) {
+        var link = this.graphics.newLinkNode(r[4], node, r[1], r[2], r[3]);
+        /*
         var relation_name = jso[4][r[1]];
         var group = groupedRelations[relation_name] || 'undirgroup';
-        var link = this.graphics.newLinkNode(r[4], node, r[1], r[2], r[3]);
         connector[group][tnid] = link;
+        */
+
+        connector.linkNode(tnid, link);
         node.linkConnector(connector.id, link);
       }
     }
